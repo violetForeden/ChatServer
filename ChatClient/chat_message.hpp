@@ -13,6 +13,9 @@
 
 #pragma warning(disable : 4996)
 
+#include "JsonObject.h"
+#include "SerilizationObject.hpp"
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -26,6 +29,13 @@
 struct Header {
   int bodySize;
   int type;
+};
+
+// 消息类别
+enum MessageType {
+  MT_BIND_NAME = 0, // {"name" : "abc"}
+  MT_CHAT_INFO = 1, // {"information" : "what i say"}
+  MT_ROOM_INFO = 2, // {"name" : "abc", "information" : "what i say"}
 };
 
 class chat_message {
@@ -100,5 +110,77 @@ class chat_message {
   //std::size_t body_length_;
   Header m_header;
 };
+
+template <typename T> std::string serialize(const T &obj) {
+  std::stringstream ss; // 字符串流
+  boost::archive::text_oarchive oa(ss);
+  oa &obj; // 将obj序列化输入到oa（即ss字符串）中去
+  return ss.str();
+}
+
+bool parseMessage(const std::string &input, int *type, std::string &outBuffer) {
+  auto pos = input.find_first_of(" ");
+  if (pos == std::string::npos)
+    return false;
+  if (pos == 0)
+    return false;
+  // "BindName ok" -> substr -> BindName
+  auto command = input.substr(0, pos);
+  if (command == "BindName") {
+    // try to bind name
+    std::string name = input.substr(pos + 1);
+    if (name.size() > 32)
+      return false;
+    if (type)
+      *type = MT_BIND_NAME;
+    outBuffer = serialize(SBindName(std::move(name)));
+    return true;
+  } else if (command == "Chat") {
+    // try to chat
+    std::string chat = input.substr(pos + 1);
+    if (chat.size() > 256)
+      return false;
+    outBuffer = serialize(SChatInfo(std::move(chat)));
+    if (type)
+      *type = MT_CHAT_INFO;
+    return true;
+  }
+  return false;
+}
+
+bool parseMessage2(const std::string &input, int *type, std::string &outBuffer) {
+  auto pos = input.find_first_of(" ");
+  if (pos == std::string::npos)
+    return false;
+  if (pos == 0)
+    return false;
+  // "BindName ok" -> substr -> BindName
+  auto command = input.substr(0, pos);
+  if (command == "BindName") {
+    // try to bind name
+    std::string name = input.substr(pos + 1);
+    if (name.size() > 32)
+      return false;
+    if (type)
+      *type = MT_BIND_NAME;
+    ptree tree;
+    tree.put("name", name);
+    outBuffer = ptreeToJsonString(tree);
+    return true;
+  } else if (command == "Chat") {
+    // try to chat
+    std::string chat = input.substr(pos + 1);
+    if (chat.size() > 256)
+      return false;
+    if (type)
+      *type = MT_CHAT_INFO;
+    ptree tree;
+    tree.put("information", chat);
+    outBuffer = ptreeToJsonString(tree);
+
+    return true;
+  }
+  return false;
+}
 
 #endif  // CHAT_MESSAGE_HPP

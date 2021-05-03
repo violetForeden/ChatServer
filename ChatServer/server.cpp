@@ -3,6 +3,7 @@
 */
 #include "chat_message.hpp"
 #include "SerilizationObject.hpp"
+#include "JsonObject.h"
 
 #include <boost/asio.hpp>
 
@@ -136,34 +137,63 @@ private:
     return obj;
   }
 
-  // 处理消息
-  void handleMessage() { 
+  ptree toPtree() {
+    ptree obj;
+    std::stringstream ss(std::string(
+        read_msg_.body(), read_msg_.body() + read_msg_.body_length()));
+    boost::property_tree::read_json(ss, obj);
+    return obj;
+  } 
+
+  // 处理消息 （JSON）
+  void handleMessage() {
     if (read_msg_.type() == MT_BIND_NAME) {
-      /*SBindName bindName;
-      std::stringstream ss(read_msg_.body());
-      boost::archive::text_iarchive oa(ss);
-      oa &bindName;*/
-      
-      auto bindName = toObject<SBindName>();
-      m_name = bindName.bindName();
+     
+      auto nameTree = toPtree();
+      m_name = nameTree.get<std::string>("name");
     } else if (read_msg_.type() == MT_CHAT_INFO) {
-      /*SChatInfo chat;
-      std::stringstream ss(std::string(
-          read_msg_.body(), read_msg_.body() + read_msg_.body_length()));
-      boost::archive::text_iarchive oa(ss);
-      oa &chat;*/
-      auto chat = toObject<SChatInfo>();
-      m_chatInformation = chat.chatInformation();
+      
+      auto chat = toPtree();
+      m_chatInformation = chat.get<std::string>("information");
 
       auto rinfo = buildRoomInfo();
       chat_message msg;
       msg.setMessage(MT_ROOM_INFO, rinfo);
       room_.deliver(msg);
-      
+
     } else {
       // not valid msg do nothing
     }
   }
+
+  //// 处理消息 （C++类序列化版）
+  //void handleMessage() { 
+  //  if (read_msg_.type() == MT_BIND_NAME) {
+  //    /*SBindName bindName;
+  //    std::stringstream ss(read_msg_.body());
+  //    boost::archive::text_iarchive oa(ss);
+  //    oa &bindName;*/
+  //    
+  //    auto bindName = toObject<SBindName>();
+  //    m_name = bindName.bindName();
+  //  } else if (read_msg_.type() == MT_CHAT_INFO) {
+  //    /*SChatInfo chat;
+  //    std::stringstream ss(std::string(
+  //        read_msg_.body(), read_msg_.body() + read_msg_.body_length()));
+  //    boost::archive::text_iarchive oa(ss);
+  //    oa &chat;*/
+  //    auto chat = toObject<SChatInfo>();
+  //    m_chatInformation = chat.chatInformation();
+
+  //    auto rinfo = buildRoomInfo();
+  //    chat_message msg;
+  //    msg.setMessage(MT_ROOM_INFO, rinfo);
+  //    room_.deliver(msg);
+  //    
+  //  } else {
+  //    // not valid msg do nothing
+  //  }
+  //}
 
   void do_write() {
     auto self(shared_from_this());
@@ -190,11 +220,16 @@ private:
   std::string m_name;
   std::string m_chatInformation;
   std::string buildRoomInfo() const {
-    SRoomInfo roomInfo(m_name, m_chatInformation);
+    ptree tree;
+    tree.put("name", m_name);
+    tree.put("information", m_chatInformation);
+    return ptreeToJsonString(tree);
+
+    /*SRoomInfo roomInfo(m_name, m_chatInformation);
     std::stringstream ss;
     boost::archive::text_oarchive oa(ss);
     oa &roomInfo;
-    return ss.str();
+    return ss.str();*/
   }
 };
 

@@ -4,6 +4,7 @@
 
 #include "chat_message.hpp"
 #include "SerilizationObject.hpp"
+#include "JsonObject.h"
 
 #include <boost/asio.hpp>
 
@@ -72,18 +73,25 @@ private:
           if (!ec) {
             //std::cout << "读取包体成功！\n";
             if (read_msg_.type() == MT_ROOM_INFO) {
-              
-              SRoomInfo info;   // 服务端发来的消息
+              // C++类序列化消息时使用
+              //SRoomInfo info;   // 服务端发来的消息
               std::stringstream ss( // 将read_msh_构造string流
                   std::string(read_msg_.body(),
                               read_msg_.body() + read_msg_.body_length()));
-              boost::archive::text_iarchive oa(ss); //  使用text_iarchive 将ss流进行序列化赋值
-              oa &info;
+              ptree tree;
+              boost::property_tree::read_json(ss, tree);
               std::cout << "client: '";
-              std::cout << info.name();
+              std::cout << tree.get<std::string>("name");
               std::cout << "' says '";
-              std::cout << info.information();
-              std::cout << "'\n";
+              std::cout << tree.get<std::string>("information");
+              std::cout << "\n";
+              //boost::archive::text_iarchive oa(ss); //  使用text_iarchive 将ss流进行序列化赋值
+              //oa &info;
+              //std::cout << "client: '";
+              //std::cout << info.name();
+              //std::cout << "' says '";
+              //std::cout << info.information();
+              //std::cout << "'\n";
             }
             do_read_header();
             /*std::cout.write(read_msg_.body(), read_msg_.body_length());
@@ -142,7 +150,7 @@ int main(int argc, char *argv[]) {
       auto type = 0;
       std::string input(line, line + std::strlen(line));
       std::string output;
-      if (parseMessage(input, &type, output)) {
+      if (parseMessage2(input, &type, output)) {
         msg.setMessage(type, output.data(), output.size());
         c.write(msg);
         std::cout << "write message for server " << output.size()

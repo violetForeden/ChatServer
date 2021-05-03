@@ -145,6 +145,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ChatServer\chat_message.hpp" />
+    <ClInclude Include="JsonObject.h" />
     <ClInclude Include="SerilizationObject.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
