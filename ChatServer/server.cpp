@@ -146,9 +146,13 @@ private:
   } 
 
   // 处理消息 （JSON）
-  void handleMessage() {
+  void handleMessage() { 
     if (read_msg_.type() == MT_BIND_NAME) {
-     
+      /*SBindName bindName;
+      std::stringstream ss(read_msg_.body());
+      boost::archive::text_iarchive oa(ss);
+      oa &bindName;*/
+      
       auto nameTree = toPtree();
       m_name = nameTree.get<std::string>("name");
     } else if (read_msg_.type() == MT_CHAT_INFO) {
@@ -160,7 +164,7 @@ private:
       chat_message msg;
       msg.setMessage(MT_ROOM_INFO, rinfo);
       room_.deliver(msg);
-
+      
     } else {
       // not valid msg do nothing
     }
