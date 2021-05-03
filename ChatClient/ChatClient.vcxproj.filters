@@ -18,15 +18,21 @@
     <ClCompile Include="client.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Protocal.pb.cc">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\ChatServer\chat_message.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="SerilizationObject.hpp">
+    <ClInclude Include="JsonObject.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="JsonObject.h">
+    <ClInclude Include="Protocal.pb.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SerilizationObject.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

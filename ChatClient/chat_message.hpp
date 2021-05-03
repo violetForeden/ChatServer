@@ -15,6 +15,7 @@
 
 #include "JsonObject.h"
 #include "SerilizationObject.hpp"
+#include "Protocal.pb.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -178,6 +179,42 @@ bool parseMessage2(const std::string &input, int *type, std::string &outBuffer) 
     tree.put("information", chat);
     outBuffer = ptreeToJsonString(tree);
 
+    return true;
+  }
+  return false;
+}
+
+bool parseMessage3(const std::string &input, int *type,
+                   std::string &outBuffer) {
+  auto pos = input.find_first_of(" ");
+  if (pos == std::string::npos)
+    return false;
+  if (pos == 0)
+    return false;
+  // "BindName ok" -> substr -> BindName
+  auto command = input.substr(0, pos);
+  if (command == "BindName") {
+    // try to bind name
+    std::string name = input.substr(pos + 1);
+    if (name.size() > 32)
+      return false;
+    if (type)
+      *type = MT_BIND_NAME;
+    PBindName bindName;
+    bindName.set_name(name);    // 设置值
+    //auto oldname = bindName.name(); // 得到值
+    auto ok = bindName.SerializeToString(&outBuffer);
+    return ok;
+  } else if (command == "Chat") {
+    // try to chat
+    std::string chat = input.substr(pos + 1);
+    if (chat.size() > 256)
+      return false;
+    if (type)
+      *type = MT_CHAT_INFO;
+    PChat pchat;
+    pchat.set_information(chat);
+    auto ok = pchat.SerializeToString(&outBuffer);
     return true;
   }
   return false;

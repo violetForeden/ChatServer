@@ -1,9 +1,11 @@
 /*
         一个简单的聊天服务器
 */
+
 #include "chat_message.hpp"
-#include "SerilizationObject.hpp"
+//#include "SerilizationObject.hpp"
 #include "JsonObject.h"
+#include "Protocal.pb.h"
 
 #include <boost/asio.hpp>
 
@@ -16,6 +18,8 @@
 #include <utility>
 
 #include <cstdlib>
+
+#pragma comment(lib, "libprotobufd.lib")    // 必须通过这种方式加入动态链接库，其中dll和exe文件放在同一目录下
 
 using boost::asio::ip::tcp;
 
@@ -127,48 +131,78 @@ private:
           }
         });
   }
-  // 模板对象
-  template <typename T> T toObject() {
-    T obj;
-    std::stringstream ss(std::string(read_msg_.body(),
-                         read_msg_.body() + read_msg_.body_length()));
-    boost::archive::text_iarchive oa(ss);
-    oa &obj;
-    return obj;
-  }
+  // 模板对象(C++boost库archive序列化使用)
+  //template <typename T> T toObject() {
+  //  T obj;
+  //  std::stringstream ss(std::string(read_msg_.body(),
+  //                       read_msg_.body() + read_msg_.body_length()));
+  //  boost::archive::text_iarchive oa(ss);
+  //  oa &obj;
+  //  return obj;
+  //}
 
+  // JSON序列化使用
   ptree toPtree() {
     ptree obj;
     std::stringstream ss(std::string(
         read_msg_.body(), read_msg_.body() + read_msg_.body_length()));
     boost::property_tree::read_json(ss, obj);
     return obj;
-  } 
+  }
 
-  // 处理消息 （JSON）
-  void handleMessage() { 
+  // protobuf序列化使用
+  bool fillProtobuf(::google::protobuf::Message* msg) {
+    std::string ss(read_msg_.body(),
+                   read_msg_.body() + read_msg_.body_length());
+    auto ok = msg->ParseFromString(ss);
+    return ok;
+  }
+
+  // 处理消息 （protobuf）
+  void handleMessage() {
     if (read_msg_.type() == MT_BIND_NAME) {
-      /*SBindName bindName;
-      std::stringstream ss(read_msg_.body());
-      boost::archive::text_iarchive oa(ss);
-      oa &bindName;*/
-      
-      auto nameTree = toPtree();
-      m_name = nameTree.get<std::string>("name");
+      PBindName bindName;
+      if (fillProtobuf(&bindName))
+        m_name = bindName.name();
     } else if (read_msg_.type() == MT_CHAT_INFO) {
-      
-      auto chat = toPtree();
-      m_chatInformation = chat.get<std::string>("information");
+      PChat chat;
+      if (!fillProtobuf(&chat))
+        return;
+      m_chatInformation = chat.information();
 
       auto rinfo = buildRoomInfo();
       chat_message msg;
       msg.setMessage(MT_ROOM_INFO, rinfo);
       room_.deliver(msg);
-      
+
     } else {
       // not valid msg do nothing
     }
   }
+  //// 处理消息 （JSON）
+  //void handleMessage() {
+  //  if (read_msg_.type() == MT_BIND_NAME) {
+  //    /*SBindName bindName;
+  //    std::stringstream ss(read_msg_.body());
+  //    boost::archive::text_iarchive oa(ss);
+  //    oa &bindName;*/
+
+  //    auto nameTree = toPtree();
+  //    m_name = nameTree.get<std::string>("name");
+  //  } else if (read_msg_.type() == MT_CHAT_INFO) {
+
+  //    auto chat = toPtree();
+  //    m_chatInformation = chat.get<std::string>("information");
+
+  //    auto rinfo = buildRoomInfo();
+  //    chat_message msg;
+  //    msg.setMessage(MT_ROOM_INFO, rinfo);
+  //    room_.deliver(msg);
+
+  //  } else {
+  //    // not valid msg do nothing
+  //  }
+  //}
 
   //// 处理消息 （C++类序列化版）
   //void handleMessage() { 
@@ -224,10 +258,18 @@ private:
   std::string m_name;
   std::string m_chatInformation;
   std::string buildRoomInfo() const {
-    ptree tree;
+    PRoomInformation roomInfo;
+    roomInfo.set_name(m_name);
+    roomInfo.set_information(m_chatInformation);
+    std::string out;
+    auto ok = roomInfo.SerializeToString(&out);
+    assert(ok);
+    return out;
+
+    /*ptree tree;
     tree.put("name", m_name);
     tree.put("information", m_chatInformation);
-    return ptreeToJsonString(tree);
+    return ptreeToJsonString(tree);*/
 
     /*SRoomInfo roomInfo(m_name, m_chatInformation);
     std::stringstream ss;
@@ -269,6 +311,7 @@ private:
 
 int main(int argc, char *argv[]) {
   try {
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
     if (argc < 2) {
       std::cerr << "Usage: chat_server <port> [<port> ...]\n";
       return 1;
@@ -286,6 +329,6 @@ int main(int argc, char *argv[]) {
   } catch (std::exception &e) {
     std::cerr << "Exception: " << e.what() << "\n";
   }
-  system("pause");
+  google::protobuf::ShutdownProtobufLibrary();
   return 0;
 }
