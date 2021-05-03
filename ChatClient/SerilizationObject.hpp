@@ -62,3 +62,39 @@ private:
   SChatInfo m_chat;
 };
 
+//template <typename T> std::string serialize(const T& obj) {
+//  std::stringstream ss; // 字符串流
+//  boost::archive::text_oarchive oa(ss);
+//  oa &obj;  // 将obj序列化输入到oa（即ss字符串）中去
+//  return ss.str();
+//}
+//
+//bool parseMessage(const std::string& input, int* type, std::string& outBuffer) {
+//  auto pos = input.find_first_of(" ");
+//  if (pos == std::string::npos)
+//    return false;
+//  if (pos == 0)
+//    return false;
+//  // "BindName ok" -> substr -> BindName
+//  auto command = input.substr(0, pos);
+//  if (command == "BindName") {
+//    // try to bind name
+//    std::string name = input.substr(pos + 1);
+//    if (name.size() > 32)
+//      return false;
+//    if (type)
+//      *type = MT_BIND_NAME;
+//    outBuffer = serialize(SBindName(std::move(name)));
+//    return true;
+//  } else if (command == "Chat") {
+//    // try to chat
+//    std::string chat = input.substr(pos + 1);
+//    if (chat.size() > 256)
+//      return false;
+//    outBuffer = serialize(SChatInfo(std::move(chat)));
+//    if (type)
+//      *type = MT_CHAT_INFO;
+//    return true;
+//  }
+//  return false;
+//}
