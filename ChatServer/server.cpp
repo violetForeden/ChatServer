@@ -9,6 +9,7 @@
 
 #include <boost/asio.hpp>
 
+
 #include <chrono>
 #include <deque>
 #include <iostream>
@@ -44,32 +45,38 @@ using chat_participant_ptr = std::shared_ptr<chat_participant>;
 
 class chat_room {
 public:
+  chat_room(boost::asio::io_context &io_context) : m_strand(io_context) {}
+  
   // 加入聊天室
   void join(chat_participant_ptr participant) {
-    participants_.insert(participant);
-    //std::cout << "插入聊天室！\n";
-    for (const auto &msg : recent_msgs_)
-      participant->deliver(msg);
+    m_strand.post([this, participant] { // 使用strand.post保证线程安全（加锁:异步锁）
+      participants_.insert(participant);
+      // std::cout << "插入聊天室！\n";
+      for (const auto &msg : recent_msgs_)
+        participant->deliver(msg);
+    });
   }
 
   // 离开聊天室
   void leave(chat_participant_ptr participant) {
-    participants_.erase(participant);
+    m_strand.post([this, participant] { participants_.erase(participant); });
   }
 
   // 分发消息
   void deliver(const chat_message &msg) {
-    recent_msgs_.push_back(msg);
-    while (recent_msgs_.size() > max_recent_msgs)
-      recent_msgs_.pop_front();
+    m_strand.post([this, msg] {
+      recent_msgs_.push_back(msg);
+      while (recent_msgs_.size() > max_recent_msgs)
+        recent_msgs_.pop_front();
 
-    for (auto &participant :
-         participants_) // 智能指针拷贝消耗大概是普通指针的20倍左右
-      participant->deliver(msg);
+      for (auto &participant :
+           participants_) // 智能指针拷贝消耗大概是普通指针的20倍左右
+        participant->deliver(msg);
+    });
   }
 
 private:
-  
+  boost::asio::io_context::strand m_strand;
   std::set<chat_participant_ptr> participants_;
   enum { max_recent_msgs = 100 }; // 包存最近100条消息
   chat_message_queue recent_msgs_;
@@ -80,8 +87,9 @@ private:
 class chat_session : public chat_participant,
                      public std::enable_shared_from_this<chat_session> {
 public:
-  chat_session(tcp::socket socket, chat_room &room)
-      : socket_(std::move(socket)), room_(room) {}
+  chat_session(tcp::socket socket, chat_room &room,
+               boost::asio::io_context &io_context)
+      : socket_(std::move(socket)), room_(room) ,m_strand(io_context){}
 
   void start() {
     room_.join(shared_from_this()); // 向聊天室加入一个客户端
@@ -90,12 +98,15 @@ public:
 
   void deliver(const chat_message &msg) {
     // 第一次是false
-    bool write_in_progress = !write_msgs_.empty();
-    write_msgs_.push_back(msg);
-    if (!write_in_progress) {
-      // 第一次
-      do_write();
-    }
+    m_strand.post([this, msg] {
+      bool write_in_progress = !write_msgs_.empty();
+      write_msgs_.push_back(msg);
+      if (!write_in_progress) {
+        // 第一次
+        do_write();
+      }
+    });
+    
   }
 
 private:
@@ -104,16 +115,17 @@ private:
     boost::asio::async_read(
         socket_,
         boost::asio::buffer(read_msg_.data(), chat_message::header_length),
-        [this, self](boost::system::error_code ec, std::size_t /*length*/) {
-          if (!ec && read_msg_.decode_header()) {
-            //std::cout << "读取包头成功！\n";
-            do_read_body();
-          } else {
-            //std::cout << "error: " << ec << std::endl;
-            std::cout << "Player leave the room\n";
-            room_.leave(shared_from_this());
-          }
-        });
+        m_strand.wrap(
+            [this, self](boost::system::error_code ec, std::size_t /*length*/) {
+              if (!ec && read_msg_.decode_header()) {
+                // std::cout << "读取包头成功！\n";
+                do_read_body();
+              } else {
+                // std::cout << "error: " << ec << std::endl;
+                std::cout << "Player leave the room\n";
+                room_.leave(shared_from_this());
+              }
+            }));
   }
 
   void do_read_body() {
@@ -250,18 +262,19 @@ private:
         socket_,
         boost::asio::buffer(write_msgs_.front().data(),
                             write_msgs_.front().length()),
-        [this, self](boost::system::error_code ec, std::size_t /*length*/) {
-          if (!ec) {
-            write_msgs_.pop_front();
-            if (!write_msgs_.empty()) {
-              do_write();
-            }
-          } else {
-            room_.leave(shared_from_this());
-          }
-        });
+        m_strand.wrap(
+            [this, self](boost::system::error_code ec, std::size_t /*length*/) {
+              if (!ec) {
+                write_msgs_.pop_front();
+                if (!write_msgs_.empty()) {
+                  do_write();
+                }
+              } else {
+                room_.leave(shared_from_this());
+              }
+            }));
   }
-
+  boost::asio::io_context::strand m_strand;
   tcp::socket socket_;
   chat_room &room_;
   chat_message read_msg_;
@@ -296,7 +309,7 @@ class chat_server {
 public:
   chat_server(boost::asio::io_context &io_context,
               const tcp::endpoint &endpoint)
-      : acceptor_(io_context, endpoint) {
+      : acceptor_(io_context, endpoint), room_(io_context), io_context_(io_context){
     do_accept();
   }
 
@@ -305,15 +318,14 @@ private:
     acceptor_.async_accept([this](boost::system::error_code ec,
                                   tcp::socket socket) {
       if (!ec) {
-        auto session = std::make_shared<chat_session>(std::move(socket), room_);
+        auto session = std::make_shared<chat_session>(std::move(socket), room_, io_context_);
         session->start();
         std::cout << "客户端建立连接" << std::endl;
       }
-
       do_accept();
     });
   }
-
+  boost::asio::io_context &io_context_;
   tcp::acceptor acceptor_;
   chat_room room_;
 };
