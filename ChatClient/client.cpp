@@ -9,9 +9,12 @@
 
 #include <boost/asio.hpp>
 
+#include <chrono>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <thread>
+#include <vector>
 
 #include <cstdlib>
 
@@ -145,10 +148,15 @@ int main(int argc, char *argv[]) {
     }
 
     boost::asio::io_context io_context;
+    std::vector<std::unique_ptr<chat_client>> clientGroup; // 测试多客户端并发
 
     tcp::resolver resolver(io_context);
     auto endpoints = resolver.resolve(argv[1], argv[2]);
-    chat_client c(io_context, endpoints);
+    for (int i = 0; i < 10; ++i) {
+      clientGroup.emplace_back(
+          std::make_unique<chat_client>(io_context, endpoints));
+    }
+    
 
     std::thread t([&io_context]() { io_context.run(); }); // 另开线程跑io
 
@@ -160,7 +168,16 @@ int main(int argc, char *argv[]) {
       std::string output;
       if (parseMessage3(input, &type, output)) {
         msg.setMessage(type, output.data(), output.size());
-        c.write(msg);
+        // 测试客户端并发消息
+        //int sendCount = rand() % 10 + 1;
+        //for (int i = 0; i < sendCount; ++i) {
+          //// 让消息缓存100毫秒在发送
+          //std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        for (auto &v : clientGroup) {
+          v->write(msg);
+        }
+        //}
+          
         std::cout << "write message for server " << output.size()
                   << std::endl;
       }
@@ -169,8 +186,8 @@ int main(int argc, char *argv[]) {
       msg.encode_header();
       c.write(msg);*/
     }
-
-    c.close(); // 释放相关资源，让io_context.run()退出
+    for (auto &v : clientGroup)
+      v->close(); // 释放相关资源，让io_context.run()退出
     t.join();
   } catch (std::exception &e) {
     std::cerr << "Exception: " << e.what() << "\n";

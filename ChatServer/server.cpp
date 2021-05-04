@@ -9,6 +9,7 @@
 
 #include <boost/asio.hpp>
 
+#include <chrono>
 #include <deque>
 #include <iostream>
 #include <list>
@@ -28,6 +29,8 @@ using boost::asio::ip::tcp;
 using chat_message_queue = std::deque<chat_message>;
 
 //----------------------------------------------------------------------
+std::chrono::system_clock::time_point base;
+
 // 基类，抽象类
 class chat_participant {
 public:
@@ -66,6 +69,7 @@ public:
   }
 
 private:
+  
   std::set<chat_participant_ptr> participants_;
   enum { max_recent_msgs = 100 }; // 包存最近100条消息
   chat_message_queue recent_msgs_;
@@ -160,6 +164,13 @@ private:
 
   // 处理消息 （protobuf）
   void handleMessage() {
+    auto n = std::chrono::system_clock::now() - base;
+    // 检查当前任务由哪个线程执行
+    std::cout
+        << "i'm in " << std::this_thread::get_id() << " time "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(n).count()
+        << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
     if (read_msg_.type() == MT_BIND_NAME) {
       PBindName bindName;
       if (fillProtobuf(&bindName))
@@ -311,11 +322,12 @@ private:
 
 int main(int argc, char *argv[]) {
   try {
-    GOOGLE_PROTOBUF_VERIFY_VERSION;
+    GOOGLE_PROTOBUF_VERIFY_VERSION; // 检查验证protobuf版本
     if (argc < 2) {
       std::cerr << "Usage: chat_server <port> [<port> ...]\n";
       return 1;
     }
+    base = std::chrono::system_clock::now();
 
     boost::asio::io_context io_context;
 
@@ -324,11 +336,20 @@ int main(int argc, char *argv[]) {
       tcp::endpoint endpoint(tcp::v4(), std::atoi(argv[i]));
       servers.emplace_back(io_context, endpoint);
     }
-
+    // 直接vector创建多线程asio (线程不安全)
+    std::vector<std::thread> threadGroup; // 线程池
+    for (int i = 0; i < 5; ++i) {
+      threadGroup.emplace_back([&io_context, i]{ 
+          std::cout << i << " name is " << std::this_thread::get_id() << std::endl;
+          io_context.run(); });
+    }
+    std::cout << "main name is" << std::this_thread::get_id() << std::endl;
     io_context.run();
+    for (auto &v : threadGroup)
+      v.join();
   } catch (std::exception &e) {
     std::cerr << "Exception: " << e.what() << "\n";
   }
-  google::protobuf::ShutdownProtobufLibrary();
+  google::protobuf::ShutdownProtobufLibrary();  // 释放protobuf的资源
   return 0;
 }

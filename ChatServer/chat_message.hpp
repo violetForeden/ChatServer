@@ -83,7 +83,7 @@ public:
   // 对包头进行解码
   bool decode_header() {
     std::memcpy(&m_header, data(), header_length);
-    std::cout << m_header.type << " " << m_header.bodySize << std::endl;
+    //std::cout << m_header.type << " " << m_header.bodySize << std::endl;
     if (m_header.bodySize > max_body_length) {
       std::cout << "body size " << m_header.bodySize << " " << m_header.type
                 << std::endl;

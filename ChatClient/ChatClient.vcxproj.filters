@@ -29,10 +29,10 @@
     <ClInclude Include="JsonObject.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Protocal.pb.h">
+    <ClInclude Include="SerilizationObject.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="SerilizationObject.hpp">
+    <ClInclude Include="Protocal.pb.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
